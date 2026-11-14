@@ -3,8 +3,8 @@
 ## Прямые HID-драйверы
 
 - Linux x86_64, GCC 13.3.0, Qt 6.4.2, HIDAPI, warnings-as-errors: сборка успешна.
-- CTest: **114/114** (111 GoogleTest, release tools, GUI Preview, CLI version).
-- ASan + UBSan: **114/114**, ошибок не обнаружено.
+- CTest: **115/115** (112 GoogleTest, release tools, GUI Preview, CLI version).
+- ASan + UBSan: **115/115**, ошибок не обнаружено.
 - Покрытие `core/backends/drivers/logitech/razer/corsair`: **95,0% строк** (843/887), **100% функций** (83/83).
 - Python release tools: **13 тестов**.
 - actionlint и `git diff --check`: успешно.

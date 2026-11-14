@@ -40,7 +40,8 @@ class Logitech final : public ambient::LightingOutput {
     Profile profile_;
     void send(const std::array<unsigned char, 20> &packet) {
         // HIDAPI expects the actual numbered report ID (0x11), without an extra zero prefix.
-        if (hid_write(handle_, packet.data(), packet.size()) != static_cast<int>(packet.size()))
+        // Windows may pad to the longest output report and return that larger length.
+        if (hid_write(handle_, packet.data(), packet.size()) < static_cast<int>(packet.size()))
             fail("Logitech HID write failed; check the USB connection and close other lighting software");
     }
 

@@ -248,7 +248,7 @@ class VialRgb final : public ambient::LightingOutput {
         packet[1] = command;
         packet[2] = setting;
         std::copy(args.begin(), args.end(), packet.begin() + 3);
-        if (hid_write(handle_, packet.data(), packet.size()) != static_cast<int>(packet.size()))
+        if (hid_write(handle_, packet.data(), packet.size()) < static_cast<int>(packet.size()))
             fail("VialRGB write failed");
         std::array<unsigned char, 32> reply{};
         if (hid_read_timeout(handle_, reply.data(), reply.size(), 250) != 32 || reply[0] != command ||
@@ -344,7 +344,7 @@ class Via final : public ambient::LightingOutput {
             packet[4] = a;
             packet[5] = b;
         }
-        if (hid_write(handle_, packet.data(), packet.size()) != static_cast<int>(packet.size()))
+        if (hid_write(handle_, packet.data(), packet.size()) < static_cast<int>(packet.size()))
             fail("VIA write failed");
         std::array<unsigned char, 32> reply{};
         const auto n = hid_read_timeout(handle_, reply.data(), reply.size(), 250);

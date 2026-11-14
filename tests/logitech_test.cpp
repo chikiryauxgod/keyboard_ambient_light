@@ -11,7 +11,7 @@
 struct hid_device_ {};
 namespace {
 struct Fake {
-    bool initFailure{}, openFailure{}, shortWrite{}, enumerate{};
+    bool initFailure{}, openFailure{}, shortWrite{}, enumerate{}, paddedWrite{};
     unsigned opens{}, closes{}, frees{};
     std::vector<std::vector<unsigned char>> packets;
 } fake;
@@ -62,7 +62,7 @@ void hid_close(hid_device *) {
 }
 int hid_write(hid_device *, const unsigned char *packet, std::size_t size) {
     fake.packets.emplace_back(packet, packet + size);
-    return fake.shortWrite ? static_cast<int>(size) - 1 : static_cast<int>(size);
+    return fake.shortWrite ? static_cast<int>(size) - 1 : fake.paddedWrite ? 64 : static_cast<int>(size);
 }
 int hid_read_timeout(hid_device *, unsigned char *, std::size_t, int) {
     return 0;
@@ -186,4 +186,14 @@ TEST_F(LogitechProtocol, NonFiniteChannelsProduceBoundedBlackInsteadOfUndefinedC
     EXPECT_EQ(fake.packets.front()[6], 0);
     EXPECT_EQ(fake.packets.front()[7], 0);
     EXPECT_EQ(fake.packets.front()[8], 0);
+}
+
+TEST_F(LogitechProtocol, WindowsPaddedOutputLengthIsNotAnError) {
+    fake.paddedWrite = true;
+    auto output = openLogitech(keyboard());
+    const ambient::Rgb red[] = {{1, 0, 0}};
+    EXPECT_NO_THROW(output->write(red, 1));
+    ASSERT_EQ(fake.packets.size(), 1u);
+    EXPECT_EQ(fake.packets.front().size(), 20u);
+    EXPECT_EQ(fake.packets.front()[6], 255);
 }

@@ -43,7 +43,7 @@ class CorsairOutput final : public ambient::LightingOutput {
     unsigned leds_{};
     bool controlled_{};
     void send(const Report &packet) {
-        if (hid_write(handle_, packet.data(), packet.size()) != static_cast<int>(packet.size()))
+        if (hid_write(handle_, packet.data(), packet.size()) < static_cast<int>(packet.size()))
             corsairError("Corsair HID write failed; check connection and close other lighting software");
     }
     void identify() {
