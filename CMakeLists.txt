@@ -169,6 +169,12 @@ if(AMBIENT_BUILD_GUI)
     if(UNIX AND NOT APPLE)
       set_target_properties(keyboard-ambient PROPERTIES INSTALL_RPATH "$ORIGIN/../lib")
     endif()
+    if(APPLE AND TARGET Qt6::QOffscreenIntegrationPlugin)
+      # macdeployqt selects cocoa by default. Stage the headless plugin before
+      # deployment so its dependencies and the final bundle are processed too.
+      install(FILES "$<TARGET_FILE:Qt6::QOffscreenIntegrationPlugin>"
+        DESTINATION "keyboard-ambient.app/Contents/PlugIns/platforms")
+    endif()
     qt_generate_deploy_app_script(TARGET keyboard-ambient OUTPUT_SCRIPT deploy_script NO_UNSUPPORTED_PLATFORM_ERROR NO_COMPILER_RUNTIME)
     install(SCRIPT ${deploy_script})
     if(UNIX AND NOT APPLE)

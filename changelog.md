@@ -26,6 +26,7 @@
 
 ### Fixed
 
+- macOS portable bundle включает `offscreen`-плагин для автономного smoke-теста без Qt SDK.
 - macOS bundle устанавливается в корень portable-каталога до запуска `macdeployqt`.
 - Unix-архив сохраняет запускаемый бинарник с правами `0755`, в том числе при упаковке на Windows.
 - Подключение заголовков HIDAPI в сборках Windows (vcpkg) и macOS (Homebrew).
