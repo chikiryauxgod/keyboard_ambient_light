@@ -24,7 +24,7 @@ jobs:
           - os: windows-2022
             arch: win64_msvc2022_64
             platform: windows-x86_64
-          - os: macos-26
+          - os: macos-15
             arch: clang_64
             platform: macos-arm64
     runs-on: ${{ matrix.os }}
@@ -48,6 +48,13 @@ jobs:
           brew install hidapi
           echo "hidapi_ROOT=$(brew --prefix hidapi)" >> "$GITHUB_ENV"
           echo "HIDAPI_ROOT=$(brew --prefix hidapi)" >> "$GITHUB_ENV"
+      - name: Select macOS SDK compatible with Qt 6.8
+        if: runner.os == 'macOS'
+        run: |
+          developer_dir=/Applications/Xcode_16.4.app/Contents/Developer
+          test -d "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$developer_dir" xcrun --sdk macosx --show-sdk-version
       - name: Windows dependencies
         if: runner.os == 'Windows'
         shell: pwsh

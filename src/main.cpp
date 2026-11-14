@@ -126,8 +126,8 @@ class Window final : public QMainWindow {
                           QString(", ENV{ID_USB_INTERFACE_NUM}==\"%1\", TAG+=\"uaccess\"\n")
                               .arg(d.interfaceNumber, 2, 16, QChar('0'));
         QSaveFile file(path);
-        const auto data = rule.toUtf8();
-        if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
+        const auto ruleBytes = rule.toUtf8();
+        if (!file.open(QIODevice::WriteOnly) || file.write(ruleBytes) != ruleBytes.size() || !file.commit()) {
             QMessageBox::warning(this, "USB access", file.errorString());
             return;
         }
