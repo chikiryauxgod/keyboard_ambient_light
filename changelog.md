@@ -26,7 +26,8 @@
 
 ### Fixed
 
-- macOS portable bundle включает `offscreen`-плагин для автономного smoke-теста без Qt SDK.
+- Portable-пакеты включают `offscreen`-плагин на всех ОС для автономного smoke-теста без Qt SDK.
+- Диагностика Qt при сбое или таймауте portable smoke-теста сохраняется в лог CI.
 - macOS bundle устанавливается в корень portable-каталога до запуска `macdeployqt`.
 - Unix-архив сохраняет запускаемый бинарник с правами `0755`, в том числе при упаковке на Windows.
 - Подключение заголовков HIDAPI в сборках Windows (vcpkg) и macOS (Homebrew).
