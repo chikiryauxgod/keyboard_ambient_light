@@ -38,8 +38,15 @@ def package(stage, output, version, platform, commit):
             for path in sorted(stage.rglob("*")):
                 file.write(path, Path(name) / path.relative_to(stage))
     else:
+        def executable_mode(info):
+            # NTFS/chmod cannot supply POSIX execute bits when a Unix target tree
+            # is packaged on Windows. The entry point must always be runnable.
+            if info.isfile() and info.name == f"{name}/{executable}":
+                info.mode = 0o755
+            return info
+
         with tarfile.open(archive, "w:gz", dereference=False) as file:
-            file.add(stage, arcname=name)
+            file.add(stage, arcname=name, filter=executable_mode)
     with archive.open("rb") as file:
         digest = hashlib.file_digest(file, "sha256").hexdigest()
     archive.with_name(archive.name + ".sha256").write_text(f"{digest}  {archive.name}\n", encoding="utf-8")

@@ -88,6 +88,13 @@ class PackageTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             packaging.package(self.stage, self.out, "release/v1", "linux-x86_64", SHA)
 
+    def test_unix_archive_entry_point_is_executable_without_host_execute_bits(self):
+        (self.stage / "bin/keyboard-ambient").chmod(0o644)
+        path = packaging.package(self.stage, self.out, "v0.1.0", "linux-x86_64", SHA)
+        with tarfile.open(path) as archive:
+            executable = next(item for item in archive.getmembers() if item.name.endswith("/bin/keyboard-ambient"))
+            self.assertEqual(executable.mode, 0o755)
+
     def test_windows_zip(self):
         path = packaging.package(self.stage, self.out, "v1", "windows-x86_64", SHA)
         with zipfile.ZipFile(path) as archive:
