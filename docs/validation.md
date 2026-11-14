@@ -1,5 +1,20 @@
 # Локальная проверка — 2026-11-14
 
+## Прямые HID-драйверы
+
+- Linux x86_64, GCC 13.3.0, Qt 6.4.2, HIDAPI, warnings-as-errors: сборка успешна.
+- CTest: **114/114** (111 GoogleTest, release tools, GUI Preview, CLI version).
+- ASan + UBSan: **114/114**, ошибок не обнаружено.
+- Покрытие `core/backends/drivers/logitech/razer/corsair`: **95,0% строк** (843/887), **100% функций** (83/83).
+- Python release tools: **13 тестов**.
+- actionlint и `git diff --check`: успешно.
+
+VialRGB, Logitech, Razer и Corsair проверяются на fake HIDAPI; реальные устройства
+этих новых драйверов не проверялись. Модели и ограничения: [drivers.md](drivers.md).
+Переносимые пакеты всех трёх ОС дополнительно собираются и проверяются в CI.
+
+## Предыдущая проверка portable-сборок
+
 Проверено на Linux x86_64, GCC 13.3.0.
 
 | Проверка | Результат |

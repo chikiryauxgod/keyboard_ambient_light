@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 #include <hidapi.h>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -14,6 +15,9 @@ namespace {
 using Report = std::array<unsigned char, 33>;
 struct Fake {
     unsigned version{12};
+    bool vial{}, solid{true};
+    unsigned char vialVersion{1}, maximum{128};
+    std::array<unsigned char, 6> vialMode{6, 0, 90, 42, 180, 100};
     unsigned char channel{3};
     std::array<unsigned char, 2> brightness{102, 0}, effect{25, 0}, color{42, 180};
     std::vector<Report> writes;
@@ -111,7 +115,20 @@ int hid_read_timeout(hid_device *, unsigned char *data, std::size_t size, int ti
     const auto p = fake.pending;
     std::array<unsigned char, 32> reply{};
     std::copy_n(p.begin() + 1, 32, reply.begin());
-    if (p[1] == 1) {
+    if (fake.vial) {
+        if (p[2] == 0x40) {
+            reply[2] = fake.vialVersion;
+            reply[3] = 0;
+            reply[4] = fake.maximum;
+        } else if (p[2] == 0x42) {
+            reply[2] = fake.solid ? 2 : 0xff;
+            reply[3] = fake.solid ? 0 : 0xff;
+        } else if (p[2] == 0x41) {
+            if (p[1] == 7)
+                std::copy_n(p.begin() + 3, 6, fake.vialMode.begin());
+            std::copy(fake.vialMode.begin(), fake.vialMode.end(), reply.begin() + 2);
+        }
+    } else if (p[1] == 1) {
         reply[1] = 0;
         reply[2] = static_cast<unsigned char>(fake.version);
     } else if (p[2] != fake.channel || (p[1] == 8 && p[3] == fake.rejectGet))
@@ -192,11 +209,14 @@ TEST_F(ViaFailure, RestoreAttemptsRemainingSettingsAfterOneFailure) {
 TEST_F(ViaFailure, DiscoveryFiltersInterfacesAndBuildsStandardProfilesWithoutWrites) {
     fake.enumerateDevices = true;
     const auto devices = viaDevices();
-    ASSERT_EQ(devices.size(), 3);
+    ASSERT_EQ(devices.size(), 5);
     EXPECT_EQ(devices[0].channel, 3);
     EXPECT_EQ(devices[1].channel, 2);
     EXPECT_FALSE(devices[0].verifiedProfile);
-    EXPECT_TRUE(devices[2].verifiedProfile);
+    EXPECT_TRUE(devices[3].verifiedProfile);
+    EXPECT_EQ(devices[2].kind, DeviceKind::VialRgb);
+    EXPECT_EQ(devices[4].kind, DeviceKind::VialRgb);
+    EXPECT_FALSE(devices[2].verifiedProfile);
     EXPECT_EQ(devices[0].vendorId, 0x1111);
     EXPECT_EQ(devices[0].interfaceNumber, 2);
     EXPECT_NE(devices[0].key, devices[1].key);
@@ -209,4 +229,92 @@ TEST_F(ViaFailure, DiscoveryHandlesNoDevices) {
     EXPECT_TRUE(viaDevices().isEmpty());
     EXPECT_EQ(fake.freedEnumerations, 1u);
     EXPECT_TRUE(fake.writes.empty());
+}
+
+class VialProtocol : public testing::Test {
+    void SetUp() override {
+        fake = {};
+        fake.vial = true;
+    }
+};
+TEST_F(VialProtocol, SnapshotColorBrightnessAndRestoration) {
+    const auto original = fake.vialMode;
+    {
+        auto output = openVialRgb(device());
+        ASSERT_EQ(fake.writes.size(), 3u);
+        EXPECT_FALSE(hasWrites());
+        const ambient::Rgb green[] = {{0, 1, 0}};
+        output->write(green, .5f);
+        EXPECT_EQ(fake.vialMode, (std::array<unsigned char, 6>{2, 0, 90, 85, 255, 64}));
+        output->restore();
+        EXPECT_EQ(fake.vialMode, original);
+        const auto count = fake.writes.size();
+        output->restore();
+        output->write({}, 1);
+        EXPECT_EQ(fake.writes.size(), count);
+    }
+    EXPECT_EQ(fake.closes, 1u);
+    for (const auto &packet : fake.writes)
+        EXPECT_TRUE(packet[1] == 7 || packet[1] == 8); // No EEPROM save commands.
+}
+TEST_F(VialProtocol, DestructorRestoresAndClampsBrightness) {
+    const auto original = fake.vialMode;
+    {
+        auto output = openVialRgb(device());
+        const ambient::Rgb white[] = {{1, 1, 1}};
+        output->write(white, 2);
+        EXPECT_EQ(fake.vialMode[5], 128);
+        output->write(white, -1);
+        EXPECT_EQ(fake.vialMode[5], 0);
+    }
+    EXPECT_EQ(fake.vialMode, original);
+}
+TEST_F(VialProtocol, UnsupportedProtocolDoesNotModifyLighting) {
+    fake.vialVersion = 2;
+    EXPECT_THROW(openVialRgb(device()), std::runtime_error);
+    EXPECT_FALSE(hasWrites());
+    EXPECT_EQ(fake.closes, 1u);
+}
+TEST_F(VialProtocol, MissingSolidEffectDoesNotModifyLighting) {
+    fake.solid = false;
+    EXPECT_THROW(openVialRgb(device()), std::runtime_error);
+    EXPECT_FALSE(hasWrites());
+    EXPECT_EQ(fake.closes, 1u);
+}
+TEST_F(VialProtocol, ShortReplyClosesHandleWithoutChangingLighting) {
+    fake.shortReply = true;
+    EXPECT_THROW(openVialRgb(device()), std::runtime_error);
+    EXPECT_FALSE(hasWrites());
+    EXPECT_EQ(fake.closes, 1u);
+}
+TEST_F(VialProtocol, OpenFailureDoesNotWrite) {
+    fake.openFailure = true;
+    EXPECT_THROW(openVialRgb(device()), std::runtime_error);
+    EXPECT_TRUE(fake.writes.empty());
+    EXPECT_EQ(fake.closes, 0u);
+}
+
+TEST_F(VialProtocol, InvalidBrightnessCapabilityDoesNotModifyLighting) {
+    fake.maximum = 0;
+    EXPECT_THROW(openVialRgb(device()), std::runtime_error);
+    EXPECT_FALSE(hasWrites());
+    EXPECT_EQ(fake.closes, 1u);
+}
+TEST_F(VialProtocol, FailedAcknowledgementStillRestoresPossiblyAcceptedFrame) {
+    const auto original = fake.vialMode;
+    auto output = openVialRgb(device());
+    const ambient::Rgb red[] = {{1, 0, 0}};
+    fake.shortReply = true;
+    EXPECT_THROW(output->write(red, 1), std::runtime_error);
+    EXPECT_THROW(output->restore(), std::runtime_error);
+    fake.shortReply = false;
+    EXPECT_NO_THROW(output->restore());
+    EXPECT_EQ(fake.vialMode, original);
+}
+TEST_F(VialProtocol, NonFiniteBrightnessIsRejectedBeforeChangingLighting) {
+    auto output = openVialRgb(device());
+    const auto before = fake.writes.size();
+    const ambient::Rgb white[] = {{1, 1, 1}};
+    EXPECT_THROW(output->write(white, std::numeric_limits<float>::quiet_NaN()), std::runtime_error);
+    EXPECT_EQ(fake.writes.size(), before);
 }

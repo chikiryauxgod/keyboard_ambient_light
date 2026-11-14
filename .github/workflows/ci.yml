@@ -67,7 +67,7 @@ jobs:
         run: |
           python -m pip install gcovr==8.8
           mkdir -p coverage
-          gcovr --root . --filter 'src/(core|backends)\.cpp$' --merge-mode-functions merge-use-line-min --xml coverage/coverage.xml --html-details coverage/index.html --print-summary --fail-under-line 80
+          gcovr --root . --filter 'src/(core|backends|drivers|logitech|razer|corsair)\.cpp$' --merge-mode-functions merge-use-line-min --xml coverage/coverage.xml --html-details coverage/index.html --print-summary --fail-under-line 80
       - name: Diagnostics and coverage
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
