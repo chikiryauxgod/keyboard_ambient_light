@@ -29,7 +29,9 @@
 #include <QVBoxLayout>
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <memory>
+#include <string_view>
 
 struct OutputWorker : QObject {
     std::unique_ptr<ambient::LightingOutput> output;
@@ -88,6 +90,7 @@ class Window final : public QMainWindow {
         loading_ = false;
         auto d = devices_.value(device_->currentIndex());
         deviceInfo_->setText(d.details);
+        start_->setText(d.kind == DeviceKind::Preview ? "Start preview" : "Start lighting");
         if (!scanning_ && !active_)
             start_->setEnabled(d.available);
     }
@@ -104,10 +107,10 @@ class Window final : public QMainWindow {
     }
     void exportAccessRule() {
         const auto d = devices_.value(device_->currentIndex());
-        if (d.kind != DeviceKind::Via || d.interfaceNumber < 0) {
+        if ((d.kind == DeviceKind::Preview || d.kind == DeviceKind::OpenRgb) || d.interfaceNumber < 0) {
             QMessageBox::information(
                 this, "USB access",
-                "Select a directly connected VIA device with a known USB interface first.");
+                "Select a directly connected HID device with a known USB interface first.");
             return;
         }
         const auto path = QFileDialog::getSaveFileName(this, "Export device access rule",
@@ -123,8 +126,8 @@ class Window final : public QMainWindow {
                           QString(", ENV{ID_USB_INTERFACE_NUM}==\"%1\", TAG+=\"uaccess\"\n")
                               .arg(d.interfaceNumber, 2, 16, QChar('0'));
         QSaveFile file(path);
-        const auto data = rule.toUtf8();
-        if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
+        const auto ruleBytes = rule.toUtf8();
+        if (!file.open(QIODevice::WriteOnly) || file.write(ruleBytes) != ruleBytes.size() || !file.commit()) {
             QMessageBox::warning(this, "USB access", file.errorString());
             return;
         }
@@ -163,11 +166,7 @@ class Window final : public QMainWindow {
                 preview.details = "Preview · no device writes";
                 found.push_back(preview);
                 QStringList notes;
-                try {
-                    found.append(viaDevices());
-                } catch (const std::exception &e) {
-                    notes << QString::fromUtf8(e.what());
-                }
+                found.append(directDevices(&notes));
                 try {
                     found.append(openRgbDevices(host, port));
                 } catch (const std::exception &e) {
@@ -230,10 +229,10 @@ class Window final : public QMainWindow {
             [this, device, host, port, session] {
                 QString error;
                 try {
-                    if (device.kind == DeviceKind::Via)
-                        worker_->output = openVia(device);
-                    else if (device.kind == DeviceKind::OpenRgb)
+                    if (device.kind == DeviceKind::OpenRgb)
                         worker_->output = openRgb(host, port, device);
+                    else if (device.kind != DeviceKind::Preview)
+                        worker_->output = openDirect(device);
                 } catch (const std::exception &e) {
                     error = QString::fromUtf8(e.what());
                 }
@@ -251,8 +250,13 @@ class Window final : public QMainWindow {
                         smoother_.reset();
                         elapsed_.start();
                         timer_.start(1000 / fps_->value());
-                        status_->setText(source_->currentIndex() == 0 ? "Running · " + capture_.description()
-                                                                      : "Running · calibration test color");
+                        const auto device = devices_.value(device_->currentIndex());
+                        const auto source =
+                            source_->currentIndex() == 0 ? capture_.description() : "calibration test color";
+                        status_->setText(device.kind == DeviceKind::Preview
+                                             ? "Preview only · keyboard lighting is not controlled · " +
+                                                   source
+                                             : "Running · " + device.label + " · " + source);
                     },
                     Qt::QueuedConnection);
             },
@@ -398,10 +402,11 @@ class Window final : public QMainWindow {
         start();
     }
     bool previewHealthy() const {
-        return active_ && raw_->toolTip() == "#ff0000" && output_->toolTip() == "#800000";
+        return active_ && raw_->toolTip() == "#ff0000" && output_->toolTip() == "#800000" &&
+               status_->text().startsWith("Preview only") && start_->text() == "Start preview";
     }
     Window() {
-        setWindowTitle("Keyboard Ambient");
+        setWindowTitle("Keyboard Ambient " + QCoreApplication::applicationVersion());
         resize(680, 780);
         worker_->moveToThread(&io_);
         connect(&io_, &QThread::finished, worker_, &QObject::deleteLater);
@@ -527,9 +532,9 @@ class Window final : public QMainWindow {
         connect(host_, &QLineEdit::textChanged, this,
                 [this](const QString &v) { settings_.setValue("host", v); });
         auto *support = new QLabel("OpenRGB discovers devices by name and uses Direct mode for live updates. "
-                                   "Standard VIA RGB Matrix/RGB Light devices connect directly over HID. "
-                                   "Wireless control depends on the receiver's firmware. Devices without "
-                                   "software RGB control require an additional driver or firmware support.");
+                                   "VIA, VialRGB and selected Logitech, Razer and Corsair USB keyboards "
+                                   "connect directly over HID. Check the selected profile for compatibility "
+                                   "and Stop behavior. Wireless support depends on the device protocol.");
         support->setWordWrap(true);
         connections->addRow(support);
 #ifdef Q_OS_LINUX
@@ -604,10 +609,16 @@ class Window final : public QMainWindow {
     }
 };
 int main(int argc, char **argv) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::string_view(argv[i]) == "--version") {
+            std::printf("Keyboard Ambient %s\n", AMBIENT_VERSION);
+            return 0;
+        }
+    }
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName("KeyboardAmbient");
     QCoreApplication::setApplicationName("KeyboardAmbient");
-    QCoreApplication::setApplicationVersion(QStringLiteral(AMBIENT_RELEASE_TAG));
+    QCoreApplication::setApplicationVersion(QStringLiteral(AMBIENT_VERSION));
     const bool smoke = app.arguments().contains("--smoke-test");
     if (smoke)
         QCoreApplication::setApplicationName("KeyboardAmbientSmokeTest");

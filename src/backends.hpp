@@ -3,9 +3,10 @@
 #include <QByteArray>
 #include <QList>
 #include <QString>
+#include <QStringList>
 #include <memory>
 
-enum class DeviceKind { Preview, Via, OpenRgb };
+enum class DeviceKind { Preview, Via, OpenRgb, VialRgb, Logitech, Razer, Corsair };
 struct Device {
     QString label{};
     QByteArray path{};
@@ -26,3 +27,9 @@ std::unique_ptr<ambient::LightingOutput> openVia(const Device &device);
 // Select controller ID explicitly; a Direct mode is required.
 std::unique_ptr<ambient::LightingOutput> openRgb(const QString &host, quint16 port, unsigned controller);
 std::unique_ptr<ambient::LightingOutput> openRgb(const QString &host, quint16 port, const Device &device);
+
+std::unique_ptr<ambient::LightingOutput> openVialRgb(const Device &device);
+
+// Discovery is read-only; vendor drivers match explicit model/interface profiles.
+QList<Device> directDevices(QStringList *errors = nullptr);
+std::unique_ptr<ambient::LightingOutput> openDirect(const Device &device);

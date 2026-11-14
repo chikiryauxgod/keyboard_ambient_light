@@ -1,5 +1,6 @@
 #pragma once
-// Test-only HIDAPI boundary. No real HID library is linked into VIA protocol tests.
+// Flat header layout matches HIDAPI's exported include directory on all platforms.
+// No real HID library is linked into VIA protocol tests.
 #include <cstddef>
 #include <cwchar>
 struct hid_device_;
@@ -21,4 +22,8 @@ hid_device *hid_open_path(const char *);
 int hid_write(hid_device *, const unsigned char *, std::size_t);
 int hid_read_timeout(hid_device *, unsigned char *, std::size_t, int);
 void hid_close(hid_device *);
+}
+extern "C" {
+int hid_send_feature_report(hid_device *, const unsigned char *, std::size_t);
+int hid_get_feature_report(hid_device *, unsigned char *, std::size_t);
 }

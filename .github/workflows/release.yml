@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.3.0); existing tags build their exact commit'
+        description: 'Release tag matching VERSION (e.g. v0.1.0); existing tags build their exact commit'
         type: string
         required: true
       draft:
@@ -35,7 +35,7 @@ jobs:
         id: resolve
         env:
           RELEASE_TAG: ${{ inputs.tag }}
-        run: python3 scripts/release_metadata.py --tag "$RELEASE_TAG" --fallback "$GITHUB_SHA" --output "$GITHUB_OUTPUT"
+        run: python3 scripts/release_metadata.py --tag "$RELEASE_TAG" --fallback "$GITHUB_SHA" --check-version --output "$GITHUB_OUTPUT"
   build:
     needs: metadata
     uses: ./.github/workflows/build.yml

@@ -7,9 +7,9 @@
 #include <cmath>
 #include <stdexcept>
 #ifdef AMBIENT_HIDAPI
-#include <hidapi/hidapi.h>
-#if defined(Q_OS_MACOS) && !defined(AMBIENT_FAKE_HIDAPI) && __has_include(<hidapi/hidapi_darwin.h>)
-#include <hidapi/hidapi_darwin.h>
+#include <hidapi.h>
+#if defined(Q_OS_MACOS) && !defined(AMBIENT_FAKE_HIDAPI) && __has_include(<hidapi_darwin.h>)
+#include <hidapi_darwin.h>
 #define AMBIENT_HID_DARWIN
 #endif
 #endif
@@ -235,6 +235,100 @@ class OpenRgb final : public ambient::LightingOutput {
 };
 
 #ifdef AMBIENT_HIDAPI
+// Protocol reference: vial-kb/vial-qmk quantum/vialrgb.{h,c}.
+// Only volatile commands are used; never write firmware configuration to EEPROM.
+class VialRgb final : public ambient::LightingOutput {
+    hid_device *handle_{};
+    std::array<unsigned char, 6> saved_{};
+    unsigned char maximum_{};
+    bool changed_{};
+    std::array<unsigned char, 32> exchange(unsigned char command, unsigned char setting,
+                                           std::span<const unsigned char> args = {}) {
+        std::array<unsigned char, 33> packet{};
+        packet[1] = command;
+        packet[2] = setting;
+        std::copy(args.begin(), args.end(), packet.begin() + 3);
+        if (hid_write(handle_, packet.data(), packet.size()) < static_cast<int>(packet.size()))
+            fail("VialRGB write failed");
+        std::array<unsigned char, 32> reply{};
+        if (hid_read_timeout(handle_, reply.data(), reply.size(), 250) != 32 || reply[0] != command ||
+            reply[1] != setting)
+            fail("Invalid VialRGB reply or timeout; close other lighting software");
+        return reply;
+    }
+
+  public:
+    explicit VialRgb(const Device &device) {
+        if (hid_init() != 0)
+            fail("HIDAPI initialization failed");
+#ifdef AMBIENT_HID_DARWIN
+        hid_darwin_set_open_exclusive(0);
+#endif
+        handle_ = hid_open_path(device.path.constData());
+        if (!handle_)
+            fail("Cannot open VialRGB HID device; check device permissions and connection");
+        try {
+            const auto info = exchange(8, 0x40);
+            if (info[2] != 1 || info[3] != 0 || info[4] == 0)
+                fail("Device does not expose VialRGB protocol 1");
+            maximum_ = info[4];
+            // Asking for IDs greater than 1 places Solid Color (ID 2) first if present.
+            const std::array<unsigned char, 2> afterDirect{1, 0};
+            const auto supported = exchange(8, 0x42, afterDirect);
+            if (supported[2] != 2 || supported[3] != 0)
+                fail("VialRGB firmware does not support Solid Color");
+            const auto mode = exchange(8, 0x41);
+            std::copy_n(mode.begin() + 2, saved_.size(), saved_.begin());
+        } catch (...) {
+            hid_close(handle_);
+            handle_ = nullptr;
+            throw;
+        }
+    }
+    void write(std::span<const ambient::Rgb> zones, float brightness) override {
+        if (zones.empty())
+            return;
+        ambient::Rgb color{};
+        for (const auto &zone : zones) {
+            color.r += zone.r;
+            color.g += zone.g;
+            color.b += zone.b;
+        }
+        const auto count = static_cast<float>(zones.size());
+        color.r /= count;
+        color.g /= count;
+        color.b /= count;
+        if (!std::isfinite(brightness))
+            fail("VialRGB brightness must be finite");
+        const auto hsv = ambient::toHsv(color);
+        const std::array<unsigned char, 6> mode{
+            2,
+            0,
+            saved_[2],
+            hsv.h,
+            hsv.s,
+            static_cast<unsigned char>(std::lround(static_cast<float>(hsv.v) / 255.f * maximum_ *
+                                                   std::clamp(brightness, 0.f, 1.f)))};
+        changed_ = true; // A failed reply may still mean the device accepted the write.
+        exchange(7, 0x41, mode);
+    }
+    void restore() override {
+        if (!changed_)
+            return;
+        exchange(7, 0x41, saved_);
+        changed_ = false;
+    }
+    ~VialRgb() override {
+        if (handle_) {
+            try {
+                restore();
+            } catch (...) {
+            }
+            hid_close(handle_);
+        }
+    }
+};
+
 class Via final : public ambient::LightingOutput {
     hid_device *handle_{};
     std::array<std::array<unsigned char, 2>, 3> saved_{};
@@ -250,7 +344,7 @@ class Via final : public ambient::LightingOutput {
             packet[4] = a;
             packet[5] = b;
         }
-        if (hid_write(handle_, packet.data(), packet.size()) != static_cast<int>(packet.size()))
+        if (hid_write(handle_, packet.data(), packet.size()) < static_cast<int>(packet.size()))
             fail("VIA write failed");
         std::array<unsigned char, 32> reply{};
         const auto n = hid_read_timeout(handle_, reply.data(), reply.size(), 250);
@@ -376,6 +470,18 @@ QList<Device> viaDevices() {
                                      "connection; firmware compatibility varies";
             devices.push_back(device);
         }
+        Device vial;
+        vial.label = label + " — VialRGB";
+        vial.path = QByteArray(d->path);
+        vial.kind = DeviceKind::VialRgb;
+        vial.vendorId = d->vendor_id;
+        vial.productId = d->product_id;
+        vial.interfaceNumber = d->interface_number;
+        const auto serial = d->serial_number ? QString::fromWCharArray(d->serial_number) : QString{};
+        vial.key = QString("vialrgb:%1:%2:%3").arg(d->vendor_id).arg(d->product_id).arg(serial);
+        vial.details = "VialRGB candidate · requires protocol 1 and Solid Color · checked on connection · "
+                       "whole-keyboard color · hardware not verified";
+        devices.push_back(vial);
     }
     hid_free_enumeration(list);
 #endif
@@ -410,4 +516,13 @@ std::unique_ptr<ambient::LightingOutput> openRgb(const QString &host, quint16 po
 }
 std::unique_ptr<ambient::LightingOutput> openRgb(const QString &host, quint16 port, const Device &device) {
     return std::make_unique<OpenRgb>(host, port, device.controller, device.key);
+}
+
+std::unique_ptr<ambient::LightingOutput> openVialRgb(const Device &device) {
+#ifdef AMBIENT_HIDAPI
+    return std::make_unique<VialRgb>(device);
+#else
+    Q_UNUSED(device);
+    fail("Built without HIDAPI; install HIDAPI and rebuild");
+#endif
 }
