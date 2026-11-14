@@ -1,0 +1,97 @@
+name: CI
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  desktop:
+    uses: ./.github/workflows/build.yml
+  checks:
+    name: Workflow lint and release tooling
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Validate release tooling
+        run: python -W error::ResourceWarning -m unittest discover -s tests -p test_release_tools.py -v
+      - name: Install actionlint
+        env:
+          GOBIN: ${{ runner.temp }}/actionlint-bin
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Validate all workflow syntax
+        run: '"$RUNNER_TEMP/actionlint-bin/actionlint" -color'
+  instrumented:
+    name: Linux ${{ matrix.mode }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [sanitizers, coverage]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y qt6-base-dev libhidapi-dev
+      - name: Configure
+        env:
+          MODE: ${{ matrix.mode }}
+        run: |
+          flag=AMBIENT_ENABLE_COVERAGE
+          if [ "$MODE" = sanitizers ]; then flag=AMBIENT_ENABLE_SANITIZERS; fi
+          cmake -S . -B build-checks -DCMAKE_BUILD_TYPE=Debug -DAMBIENT_WARNINGS_AS_ERRORS=ON -DAMBIENT_REQUIRE_HIDAPI=ON "-D${flag}=ON"
+      - name: Build
+        run: cmake --build build-checks --parallel 3
+      - name: GoogleTest and GUI checks
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build-checks --output-on-failure --output-junit test-results.xml
+      - name: Coverage report
+        if: matrix.mode == 'coverage'
+        run: |
+          python -m pip install gcovr==8.8
+          mkdir -p coverage
+          gcovr --root . --filter 'src/(core|backends)\.cpp$' --merge-mode-functions merge-use-line-min --xml coverage/coverage.xml --html-details coverage/index.html --print-summary --fail-under-line 80
+      - name: Diagnostics and coverage
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-${{ matrix.mode }}-reports
+          path: |
+            build-checks/test-results.xml
+            build-checks/Testing/Temporary/LastTest.log
+            coverage/
+          if-no-files-found: ignore
+  required:
+    name: CI required
+    if: always()
+    needs: [desktop, checks, instrumented]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every CI job to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PY'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          failed = [name for name, job in results.items() if job['result'] != 'success']
+          if failed:
+              raise SystemExit('Failed or skipped required jobs: ' + ', '.join(failed))
+          PY

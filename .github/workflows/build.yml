@@ -1,0 +1,99 @@
+name: Reusable desktop build
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
+      release_tag:
+        type: string
+        default: ''
+permissions:
+  contents: read
+jobs:
+  desktop:
+    name: ${{ matrix.platform }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: linux_gcc_64
+            platform: linux-x86_64
+          - os: windows-2022
+            arch: win64_msvc2022_64
+            platform: windows-x86_64
+          - os: macos-14
+            arch: clang_64
+            platform: macos-arm64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libhidapi-dev libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libpulse0 libpipewire-0.3-0
+      - name: macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install hidapi
+          echo "hidapi_ROOT=$(brew --prefix hidapi)" >> "$GITHUB_ENV"
+          echo "HIDAPI_ROOT=$(brew --prefix hidapi)" >> "$GITHUB_ENV"
+      - name: Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install hidapi:x64-windows
+          "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+      - uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
+        with:
+          version: '6.8.3'
+          arch: ${{ matrix.arch }}
+          modules: 'qtmultimedia'
+          cache: true
+      - name: Resolve build metadata
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          commit=$(git rev-parse HEAD)
+          version=${RELEASE_TAG:-dev-${commit:0:12}}
+          echo "BUILD_COMMIT=$commit" >> "$GITHUB_ENV"
+          echo "BUILD_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Configure
+        run: cmake --preset portable -DAMBIENT_RELEASE_TAG="$BUILD_VERSION"
+      - name: Build
+        run: cmake --build --preset portable --parallel 3
+      - name: GoogleTest, GUI and release tooling tests
+        run: ctest --preset portable --output-junit test-results.xml
+      - name: Stage desktop runtime
+        run: cmake --install build-release --config Release --prefix stage
+      - name: Check installed application without Qt SDK paths
+        run: python scripts/smoke_installed.py stage
+      - name: Package with source metadata and checksums
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: python scripts/package.py --stage stage --output artifacts --version "$BUILD_VERSION" --platform "$TARGET_PLATFORM" --commit "$BUILD_COMMIT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tests-${{ matrix.platform }}
+          path: |
+            build-release/test-results.xml
+            build-release/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore

@@ -1,0 +1,34 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {"major": 3, "minor": 21, "patch": 0},
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Desktop development",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "BUILD_TESTING": "ON"}
+    },
+    {
+      "name": "portable",
+      "displayName": "Desktop release with streaming capture (Qt 6.8 recommended)",
+      "binaryDir": "${sourceDir}/build-release",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Release", "BUILD_TESTING": "ON", "AMBIENT_REQUIRE_PORTAL": "ON", "AMBIENT_REQUIRE_HIDAPI": "ON", "AMBIENT_BUNDLE_RUNTIME": "ON", "AMBIENT_WARNINGS_AS_ERRORS": "ON"}
+    },
+    {
+      "name": "core",
+      "displayName": "Core without desktop dependencies",
+      "binaryDir": "${sourceDir}/build-core",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "AMBIENT_BUILD_GUI": "OFF", "BUILD_TESTING": "ON"}
+    }
+  ],
+  "buildPresets": [
+    {"name": "dev", "configurePreset": "dev", "configuration": "Debug"},
+    {"name": "portable", "configurePreset": "portable", "configuration": "Release"},
+    {"name": "core", "configurePreset": "core", "configuration": "Debug"}
+  ],
+  "testPresets": [
+    {"name": "dev", "configurePreset": "dev", "configuration": "Debug", "output": {"outputOnFailure": true}},
+    {"name": "portable", "configurePreset": "portable", "configuration": "Release", "output": {"outputOnFailure": true}},
+    {"name": "core", "configurePreset": "core", "configuration": "Debug", "output": {"outputOnFailure": true}}
+  ]
+}

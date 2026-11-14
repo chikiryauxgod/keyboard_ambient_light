@@ -1,0 +1,3 @@
+# Luma100 2.4G: grant the active local desktop user access only to Raw HID interface 2.
+SUBSYSTEM=="hidraw", KERNEL=="hidraw*", ATTRS{idVendor}=="342d", ATTRS{idProduct}=="e506", IMPORT{builtin}="usb_id"
+SUBSYSTEM=="hidraw", KERNEL=="hidraw*", ATTRS{idVendor}=="342d", ATTRS{idProduct}=="e506", ENV{ID_USB_INTERFACE_NUM}=="02", TAG+="uaccess"
