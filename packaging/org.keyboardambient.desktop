@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Keyboard Ambient
+Comment=Ambient keyboard lighting from screen colors
+Exec=keyboard-ambient
+Terminal=false
+Categories=Utility;Settings;
