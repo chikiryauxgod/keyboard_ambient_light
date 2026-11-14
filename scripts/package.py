@@ -10,7 +10,7 @@ from pathlib import Path
 
 def package(stage, output, version, platform, commit):
     stage, output = Path(stage).resolve(), Path(output).resolve()
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,127}", version):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/+-]{0,127}", version):
         raise ValueError("Invalid artifact version")
     if platform not in {"linux-x86_64", "windows-x86_64", "macos-arm64"}:
         raise ValueError("Unknown target platform")
@@ -22,8 +22,13 @@ def package(stage, output, version, platform, commit):
         raise ValueError(f"Missing installed executable: {executable}")
     if output == stage or stage in output.parents:
         raise ValueError("Output directory must be outside the installed tree")
+    if list(stage.rglob("VC_redist*.exe")):
+        raise ValueError("Portable archives must bundle runtime DLLs, not a redistributable installer")
     output.mkdir(parents=True, exist_ok=True)
     (stage / "BUILD-INFO.json").write_text(json.dumps({"tag": version, "commit": commit, "platform": platform}, indent=2) + "\n", encoding="utf-8")
+    launch = {"linux-x86_64": "bin/keyboard-ambient", "windows-x86_64": "bin/keyboard-ambient.exe",
+              "macos-arm64": "keyboard-ambient.app"}[platform]
+    (stage / "RUNNING.txt").write_text(f"Keyboard Ambient\n\nExtract the whole archive and run {launch}.\nNo installer, system service or automatic startup is required.\n", encoding="utf-8")
     name = f"KeyboardAmbient-{version.replace('/', '-')}-{platform}"
     archive = output / (name + (".zip" if platform.startswith("windows") else ".tar.gz"))
     if archive.exists():

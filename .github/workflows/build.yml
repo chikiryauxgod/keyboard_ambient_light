@@ -65,7 +65,8 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           commit=$(git rev-parse HEAD)
-          version=${RELEASE_TAG:-dev-${commit:0:12}}
+          base_version=$(cat VERSION)
+          version=${RELEASE_TAG:-v${base_version}-dev.${commit:0:12}}
           echo "BUILD_COMMIT=$commit" >> "$GITHUB_ENV"
           echo "BUILD_VERSION=$version" >> "$GITHUB_ENV"
       - name: Configure
@@ -75,17 +76,21 @@ jobs:
       - name: GoogleTest, GUI and release tooling tests
         run: ctest --preset portable --output-junit test-results.xml
       - name: Stage desktop runtime
-        run: cmake --install build-release --config Release --prefix stage
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: cmake --install build-release --config Release --prefix "$GITHUB_WORKSPACE/dist/$TARGET_PLATFORM"
       - name: Check installed application without Qt SDK paths
-        run: python scripts/smoke_installed.py stage
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: python scripts/smoke_installed.py "dist/$TARGET_PLATFORM"
       - name: Package with source metadata and checksums
         env:
           TARGET_PLATFORM: ${{ matrix.platform }}
-        run: python scripts/package.py --stage stage --output artifacts --version "$BUILD_VERSION" --platform "$TARGET_PLATFORM" --commit "$BUILD_COMMIT"
+        run: python scripts/package.py --stage "dist/$TARGET_PLATFORM" --output dist/artifacts --version "$BUILD_VERSION" --platform "$TARGET_PLATFORM" --commit "$BUILD_COMMIT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-${{ matrix.platform }}
-          path: artifacts/*
+          path: dist/artifacts/*
           if-no-files-found: error
           retention-days: 14
       - name: Upload test diagnostics

@@ -32,14 +32,14 @@ Branch protection. Сам workflow не меняет настройки защи
 После первого push файлов workflow в default branch:
 
 1. GitHub → **Actions → Release → Run workflow**.
-2. Выбрать ветку запуска и ввести `tag`, например `v0.3.0`.
+2. Выбрать ветку запуска и ввести `tag`, например `v0.1.0`.
 3. При необходимости включить `draft` и/или `prerelease`.
 4. Нажать Run workflow.
 
 Через GitHub CLI тот же запуск:
 
 ```bash
-gh workflow run release.yml --ref main -f tag=v0.3.0 -f draft=false -f prerelease=false
+gh workflow run release.yml --ref main -f tag=v0.1.0 -f draft=false -f prerelease=false
 ```
 
 Новый тег указывает на точный коммит выбранного запуска. Если тег существует,
@@ -47,9 +47,9 @@ gh workflow run release.yml --ref main -f tag=v0.3.0 -f draft=false -f prereleas
 должен содержать актуальные CMake/test/package-инструменты. Ветки не используются
 как подвижная ссылка во время матричной сборки: в неё передаётся полный SHA.
 
-Допустимы теги длиной до 128 символов из ASCII букв, цифр, `.`, `_`, `-`, `/`,
-начинающиеся с буквы/цифры и проходящие `git check-ref-format`. В имени файла `/`
-заменяется на `-`; исходный тег сохраняется в `BUILD-INFO.json` внутри архива.
+Релизный тег должен соответствовать версии из `VERSION`: сейчас `v0.1.0` или
+`0.1.0`. Допустимы SemVer prerelease/build суффиксы, например `v0.1.0-rc.1`.
+Версия проверяется в точном коммите, из которого собирается релиз.
 
 ## Что публикуется
 
@@ -58,7 +58,7 @@ gh workflow run release.yml --ref main -f tag=v0.3.0 -f draft=false -f prereleas
 - `KeyboardAmbient-<tag>-macos-arm64.tar.gz`
 - `SHA256SUMS`
 
-Архивы содержат установленное приложение, runtime-библиотеки и `BUILD-INFO.json`
+Portable-архивы содержат исполняемое приложение, runtime-библиотеки и `BUILD-INFO.json`
 с тегом, полным SHA коммита и платформой. Unix-архивы сохраняют исполняемые права
 и симлинки `.app`/framework. Сборка с отсутствующим HIDAPI завершается ошибкой,
 вместо выпуска урезанного приложения без VIA.
@@ -114,3 +114,21 @@ gcovr --root . --filter 'src/(core|backends)\.cpp$' --merge-mode-functions merge
 CI включает `UBSAN_OPTIONS=halt_on_error=1`, поэтому диагностика UB не остаётся
 просто сообщением в успешном тесте. `AMBIENT_WARNINGS_AS_ERRORS=ON` применяется
 к исходникам проекта; библиотеки GoogleTest и Qt не пересобираются с этим флагом.
+
+## Portable-структура dist
+
+Готовая сборка не требует установки приложения или службы. Архив распаковывается целиком.
+
+```text
+dist/
+  linux-x86_64/       # bin/keyboard-ambient + библиотеки
+  windows-x86_64/     # bin/keyboard-ambient.exe + Qt/HIDAPI/MSVC DLL
+  macos-arm64/        # keyboard-ambient.app
+  artifacts/         # архивы и контрольные суммы
+```
+
+`cmake --install --prefix <абсолютный путь>/dist/<система>` используется только как операция
+сборки файлов в локальный каталог: в системные каталоги ничего не устанавливается.
+Windows runtime размещается рядом с exe; запуск отдельного VC Redistributable
+инсталлятора не требуется. Windows 11 будет проверена пользователем; CI проверяет
+сборку, тесты и запуск portable-пакета на Windows runner.

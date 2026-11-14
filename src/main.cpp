@@ -29,7 +29,9 @@
 #include <QVBoxLayout>
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <memory>
+#include <string_view>
 
 struct OutputWorker : QObject {
     std::unique_ptr<ambient::LightingOutput> output;
@@ -88,6 +90,7 @@ class Window final : public QMainWindow {
         loading_ = false;
         auto d = devices_.value(device_->currentIndex());
         deviceInfo_->setText(d.details);
+        start_->setText(d.kind == DeviceKind::Preview ? "Start preview" : "Start lighting");
         if (!scanning_ && !active_)
             start_->setEnabled(d.available);
     }
@@ -251,8 +254,13 @@ class Window final : public QMainWindow {
                         smoother_.reset();
                         elapsed_.start();
                         timer_.start(1000 / fps_->value());
-                        status_->setText(source_->currentIndex() == 0 ? "Running · " + capture_.description()
-                                                                      : "Running · calibration test color");
+                        const auto device = devices_.value(device_->currentIndex());
+                        const auto source =
+                            source_->currentIndex() == 0 ? capture_.description() : "calibration test color";
+                        status_->setText(device.kind == DeviceKind::Preview
+                                             ? "Preview only · keyboard lighting is not controlled · " +
+                                                   source
+                                             : "Running · " + device.label + " · " + source);
                     },
                     Qt::QueuedConnection);
             },
@@ -398,10 +406,11 @@ class Window final : public QMainWindow {
         start();
     }
     bool previewHealthy() const {
-        return active_ && raw_->toolTip() == "#ff0000" && output_->toolTip() == "#800000";
+        return active_ && raw_->toolTip() == "#ff0000" && output_->toolTip() == "#800000" &&
+               status_->text().startsWith("Preview only") && start_->text() == "Start preview";
     }
     Window() {
-        setWindowTitle("Keyboard Ambient");
+        setWindowTitle("Keyboard Ambient " + QCoreApplication::applicationVersion());
         resize(680, 780);
         worker_->moveToThread(&io_);
         connect(&io_, &QThread::finished, worker_, &QObject::deleteLater);
@@ -604,10 +613,16 @@ class Window final : public QMainWindow {
     }
 };
 int main(int argc, char **argv) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::string_view(argv[i]) == "--version") {
+            std::printf("Keyboard Ambient %s\n", AMBIENT_VERSION);
+            return 0;
+        }
+    }
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName("KeyboardAmbient");
     QCoreApplication::setApplicationName("KeyboardAmbient");
-    QCoreApplication::setApplicationVersion(QStringLiteral(AMBIENT_RELEASE_TAG));
+    QCoreApplication::setApplicationVersion(QStringLiteral(AMBIENT_VERSION));
     const bool smoke = app.arguments().contains("--smoke-test");
     if (smoke)
         QCoreApplication::setApplicationName("KeyboardAmbientSmokeTest");

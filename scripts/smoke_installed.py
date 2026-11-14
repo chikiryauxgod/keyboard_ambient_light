@@ -10,6 +10,16 @@ candidates = [stage / "bin/keyboard-ambient", stage / "bin/keyboard-ambient.exe"
 executable = next((path for path in candidates if path.is_file()), None)
 if executable is None:
     raise SystemExit("Installed application not found")
+if executable.suffix == ".exe":
+    for name in ("Qt6Core.dll", "hidapi.dll", "msvcp140.dll", "vcruntime140.dll"):
+        if not (executable.parent / name).is_file():
+            raise SystemExit(f"Portable Windows runtime is incomplete: {name}")
+version_file = stage / "share/keyboard-ambient/VERSION"
+if version_file.exists():
+    actual = subprocess.check_output([str(executable), "--version"], text=True, timeout=10).strip()
+    expected = "Keyboard Ambient " + version_file.read_text().strip()
+    if actual != expected:
+        raise SystemExit(f"Version mismatch: {actual!r} != {expected!r}")
 env = os.environ.copy()
 for key in ("QT_PLUGIN_PATH", "QML_IMPORT_PATH", "QML2_IMPORT_PATH", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
     env.pop(key, None)

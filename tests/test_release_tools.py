@@ -24,6 +24,19 @@ SHA = "a" * 40
 
 
 class MetadataTests(unittest.TestCase):
+    def test_semver_release_tag_matches_source_version(self):
+        for tag in ("0.1.0", "v0.1.0", "v0.1.0-rc.1", "v0.1.0+build.1"):
+            metadata.validate_tag(tag)
+            metadata.validate_release_version(tag, "0.1.0")
+        for tag in ("v0.2.0", "v00.1.0", "v0.1.0-01", "release/foo"):
+            with self.subTest(tag=tag), self.assertRaises(ValueError):
+                metadata.validate_release_version(tag, "0.1.0")
+
+    def test_current_version_has_changelog_entry(self):
+        version = (ROOT / "VERSION").read_text().strip()
+        metadata.validate_release_version("v" + version, version)
+        self.assertIn(f"## [{version}]", (ROOT / "changelog.md").read_text(encoding="utf-8"))
+
     def test_invalid_tags(self):
         for value in ("", "-v1", "a..b", "a.lock", "v1\nother=bad", "a b", "$(touch bad)", "a/../b", "a/", "@{bad}"):
             with self.subTest(tag=value), self.assertRaises((ValueError, subprocess.CalledProcessError)):
@@ -80,6 +93,11 @@ class PackageTests(unittest.TestCase):
         with zipfile.ZipFile(path) as archive:
             self.assertIsNone(archive.testzip())
             self.assertTrue(any(name.endswith("/bin/keyboard-ambient.exe") for name in archive.namelist()))
+
+    def test_portable_windows_package_rejects_runtime_installer(self):
+        (self.stage / "bin/VC_redist.x64.exe").write_bytes(b"installer")
+        with self.assertRaises(ValueError):
+            packaging.package(self.stage, self.out, "v0.1.0", "windows-x86_64", SHA)
 
     @unittest.skipIf(os.name == "nt", "Creating symlinks requires privileges on Windows")
     def test_framework_symlinks(self):

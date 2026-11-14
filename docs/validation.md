@@ -5,13 +5,13 @@
 | Проверка | Результат |
 |---|---|
 | Release, Qt 6.8.3 + HIDAPI, warnings as errors | Сборка успешна |
-| CTest Release | 59/59 |
-| Debug, ASan + UBSan, `halt_on_error=1` | 59/59, ошибок не обнаружено |
+| CTest Release 0.1.0 | 60/60, включая проверку `--version` |
+| Debug, ASan + UBSan, `halt_on_error=1` | 60/60, ошибок не обнаружено |
 | Debug с GCC coverage | 59/59 |
 | GoogleTest | 57 отдельных тестов: цвет, область, VIA, OpenRGB |
-| Python release tools | 9 тестов, вызываются одним CTest-тестом |
+| Python release tools | 12 тестов, вызываются одним CTest-тестом |
 | GUI Preview | Отдельный CTest smoke-test, без доступа к клавиатуре |
-| Установленная Release-сборка | Smoke-test без наследования Qt SDK путей успешен |
+| Portable Release-сборка | `dist/linux-x86_64/`, smoke-test без Qt SDK путей успешен |
 | actionlint 1.7.12 | Все workflows прошли проверку |
 | `git diff --check` | Ошибок нет |
 
@@ -30,5 +30,5 @@ GoogleTest проверяет VIA с поддельным HIDAPI и OpenRGB с �
 не переключается. Поведение повреждённых пакетов, ошибок доступа/инициализации,
 неполного снимка настроек и восстановления проверяется без оборудования.
 
-Windows/macOS runners и GitHub Release из локального окружения не запускались.
-Для этого сначала нужно отправить проект с workflow-файлами в репозиторий.
+Реальная работа Windows 11 будет проверена пользователем. CI выпускает portable-
+архивы Windows x64, Linux x64 и macOS ARM64; результаты runner-ов видны в Actions.
