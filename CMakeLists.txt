@@ -88,9 +88,12 @@ if(AMBIENT_BUILD_GUI)
   if(PkgConfig_FOUND)
     pkg_check_modules(HIDAPI QUIET IMPORTED_TARGET hidapi-hidraw)
   endif()
-  if(NOT TARGET PkgConfig::HIDAPI)
-    find_path(HIDAPI_INCLUDE_DIR hidapi/hidapi.h)
-    find_library(HIDAPI_LIBRARY NAMES hidapi hidapi-hidraw)
+  if(NOT TARGET hidapi::hidapi AND NOT TARGET PkgConfig::HIDAPI)
+    find_path(HIDAPI_HEADER_DIR NAMES hidapi.h
+      HINTS ${HIDAPI_INCLUDE_DIR} ENV HIDAPI_ROOT
+      PATH_SUFFIXES hidapi include/hidapi include)
+    find_library(HIDAPI_LIBRARY NAMES hidapi hidapi-hidraw
+      HINTS ENV HIDAPI_ROOT PATH_SUFFIXES lib)
   endif()
   add_library(ambient_devices src/backends.cpp)
   target_link_libraries(ambient_devices PUBLIC ambient_core Qt6::Network)
@@ -113,8 +116,8 @@ if(AMBIENT_BUILD_GUI)
   elseif(TARGET PkgConfig::HIDAPI)
     target_link_libraries(ambient_devices PRIVATE PkgConfig::HIDAPI)
     target_compile_definitions(ambient_devices PRIVATE AMBIENT_HIDAPI)
-  elseif(HIDAPI_INCLUDE_DIR AND HIDAPI_LIBRARY)
-    target_include_directories(ambient_devices PRIVATE ${HIDAPI_INCLUDE_DIR})
+  elseif(HIDAPI_HEADER_DIR AND HIDAPI_LIBRARY)
+    target_include_directories(ambient_devices PRIVATE ${HIDAPI_HEADER_DIR})
     target_link_libraries(ambient_devices PRIVATE ${HIDAPI_LIBRARY})
     target_compile_definitions(ambient_devices PRIVATE AMBIENT_HIDAPI)
   else()
@@ -204,7 +207,9 @@ if(AMBIENT_BUILD_GUI)
     endif()
     find_file(AMBIENT_HID_DLL hidapi.dll HINTS
       "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
-      "${HIDAPI_INCLUDE_DIR}/../bin")
+      "${HIDAPI_INCLUDE_DIR}/../bin"
+      "${HIDAPI_HEADER_DIR}/../bin"
+      "${HIDAPI_HEADER_DIR}/../../bin")
     if(AMBIENT_REQUIRE_HIDAPI AND NOT AMBIENT_HID_DLL)
       message(FATAL_ERROR "HIDAPI runtime DLL required for Windows release package")
     endif()

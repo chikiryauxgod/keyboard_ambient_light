@@ -7,9 +7,9 @@
 #include <cmath>
 #include <stdexcept>
 #ifdef AMBIENT_HIDAPI
-#include <hidapi/hidapi.h>
-#if defined(Q_OS_MACOS) && !defined(AMBIENT_FAKE_HIDAPI) && __has_include(<hidapi/hidapi_darwin.h>)
-#include <hidapi/hidapi_darwin.h>
+#include <hidapi.h>
+#if defined(Q_OS_MACOS) && !defined(AMBIENT_FAKE_HIDAPI) && __has_include(<hidapi_darwin.h>)
+#include <hidapi_darwin.h>
 #define AMBIENT_HID_DARWIN
 #endif
 #endif

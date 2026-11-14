@@ -26,6 +26,7 @@
 
 ### Fixed
 
+- Подключение заголовков HIDAPI в сборках Windows (vcpkg) и macOS (Homebrew).
 - Сборка Qt runtime использует абсолютный путь к выходному каталогу, необходимый для создания `qt.conf`.
 - macOS CI использует поддерживаемый runner `macos-26` для ARM64.
 

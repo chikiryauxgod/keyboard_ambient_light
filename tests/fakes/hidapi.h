@@ -1,5 +1,6 @@
 #pragma once
-// Test-only HIDAPI boundary. No real HID library is linked into VIA protocol tests.
+// Flat header layout matches HIDAPI's exported include directory on all platforms.
+// No real HID library is linked into VIA protocol tests.
 #include <cstddef>
 #include <cwchar>
 struct hid_device_;

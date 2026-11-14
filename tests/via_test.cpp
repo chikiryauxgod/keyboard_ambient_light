@@ -4,7 +4,7 @@
 #include <array>
 #include <cstring>
 #include <gtest/gtest.h>
-#include <hidapi/hidapi.h>
+#include <hidapi.h>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
